@@ -11,7 +11,7 @@ Tampermonkey userscript for manually cleaning Bilibili watch history.
 - Deletes up to 50 or 100 matched records after a manual click.
 - Deletes `archive` records when `progress === -1` or `progress / duration >= 0.8`.
 - Deletes `live`, `article`, `article-list`, and `pgc` records directly.
-- Runs delete requests serially with a short delay and shows failures in the panel.
+- Runs delete requests serially, waits 800-1600ms between records, adds a 3-5s pause after every 20 records, and stops after 3 consecutive failures.
 - Does not call Bilibili's global clear-history API.
 
 ## Install

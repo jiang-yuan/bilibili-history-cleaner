@@ -135,8 +135,18 @@ test('buildDeleteBody includes kid and csrf', () => {
   assert.equal(cleaner.buildDeleteBody('archive_123', 'csrf-token'), 'kid=archive_123&csrf=csrf-token');
 });
 
+test('delete delay helpers return bounded conservative values', () => {
+  assert.equal(cleaner.nextDeleteDelayMs(() => 0), cleaner.MIN_DELETE_DELAY_MS);
+  assert.equal(cleaner.nextDeleteDelayMs(() => 0.999999), cleaner.MAX_DELETE_DELAY_MS);
+  assert.equal(cleaner.nextBatchPauseMs(() => 0), cleaner.MIN_BATCH_PAUSE_MS);
+  assert.equal(cleaner.nextBatchPauseMs(() => 0.999999), cleaner.MAX_BATCH_PAUSE_MS);
+  assert.equal(cleaner.shouldPauseAfterDelete(19), false);
+  assert.equal(cleaner.shouldPauseAfterDelete(20), true);
+});
+
 test('deleteCandidates runs serially and records failures', async () => {
   const calls = [];
+  const waits = [];
   const candidates = [
     { business: 'archive', kid: 'archive_1' },
     { business: 'live', kid: 'live_2' },
@@ -149,7 +159,9 @@ test('deleteCandidates runs serially and records failures', async () => {
       return { code: -1, message: 'delete failed' };
     }
     return { code: 0 };
-  }, async () => {});
+  }, async (ms) => {
+    waits.push(ms);
+  }, undefined, { random: () => 0 });
 
   assert.deepEqual(calls.map((call) => call.candidate.kid), ['archive_1', 'live_2', 'pgc_3']);
   assert.deepEqual(calls.map((call) => call.body), [
@@ -157,8 +169,53 @@ test('deleteCandidates runs serially and records failures', async () => {
     'kid=live_2&csrf=csrf-token',
     'kid=pgc_3&csrf=csrf-token'
   ]);
+  assert.deepEqual(waits, [cleaner.MIN_DELETE_DELAY_MS, cleaner.MIN_DELETE_DELAY_MS]);
   assert.equal(result.successCount, 2);
+  assert.equal(result.stoppedEarly, false);
   assert.deepEqual(result.failures, [
     { kid: 'live_2', business: 'live', message: 'delete failed' }
   ]);
+});
+
+test('deleteCandidates adds an extra pause after each batch', async () => {
+  const waits = [];
+  const candidates = Array.from({ length: 21 }, (_, index) => ({
+    business: 'archive',
+    kid: `archive_${index + 1}`
+  }));
+
+  const result = await cleaner.deleteCandidates(candidates, 'csrf-token', async () => {
+    return { code: 0 };
+  }, async (ms) => {
+    waits.push(ms);
+  }, undefined, { random: () => 0 });
+
+  assert.equal(result.successCount, 21);
+  assert.equal(result.stoppedEarly, false);
+  assert.equal(waits.filter((ms) => ms === cleaner.MIN_DELETE_DELAY_MS).length, 20);
+  assert.equal(waits.filter((ms) => ms === cleaner.MIN_BATCH_PAUSE_MS).length, 1);
+});
+
+test('deleteCandidates stops after consecutive failures', async () => {
+  const calls = [];
+  const waits = [];
+  const candidates = [
+    { business: 'archive', kid: 'archive_1' },
+    { business: 'archive', kid: 'archive_2' },
+    { business: 'archive', kid: 'archive_3' },
+    { business: 'archive', kid: 'archive_4' }
+  ];
+
+  const result = await cleaner.deleteCandidates(candidates, 'csrf-token', async (candidate) => {
+    calls.push(candidate.kid);
+    return { code: -1, message: 'rate limited' };
+  }, async (ms) => {
+    waits.push(ms);
+  }, undefined, { random: () => 0 });
+
+  assert.deepEqual(calls, ['archive_1', 'archive_2', 'archive_3']);
+  assert.deepEqual(waits, [cleaner.MIN_DELETE_DELAY_MS, cleaner.MIN_DELETE_DELAY_MS]);
+  assert.equal(result.successCount, 0);
+  assert.equal(result.failures.length, cleaner.MAX_CONSECUTIVE_FAILURES);
+  assert.equal(result.stoppedEarly, true);
 });

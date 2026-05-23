@@ -2,7 +2,7 @@
 // @name         B站历史清理
 // @name:en      Bilibili History Cleaner
 // @namespace    https://github.com/jiang-yuan/bilibili-history-cleaner
-// @version      0.1.4
+// @version      0.1.5
 // @description  手动批量清理 B 站历史记录：删除 80% 以上普通视频，以及直播、专栏、PGC 记录。
 // @description:en Manually clean Bilibili history in batches: delete 80%+ completed archive records and live/article/PGC records.
 // @author       wtvxy
@@ -33,7 +33,12 @@
   const HISTORY_API_URL = 'https://api.bilibili.com/x/web-interface/history/cursor';
   const HISTORY_PAGE_SIZE = 30;
   const DELETE_API_URL = 'https://api.bilibili.com/x/v2/history/delete';
-  const DELETE_DELAY_MS = 350;
+  const MIN_DELETE_DELAY_MS = 800;
+  const MAX_DELETE_DELAY_MS = 1600;
+  const BATCH_PAUSE_EVERY = 20;
+  const MIN_BATCH_PAUSE_MS = 3000;
+  const MAX_BATCH_PAUSE_MS = 5000;
+  const MAX_CONSECUTIVE_FAILURES = 3;
 
   function getBusiness(record) {
     return record && record.history ? String(record.history.business || '') : '';
@@ -225,18 +230,43 @@
     return params.toString();
   }
 
-  async function deleteCandidates(candidates, csrf, deleteOne, wait, onProgress) {
+  function randomDelayMs(minMs, maxMs, random) {
+    const rawRatio = typeof random === 'function' ? Number(random()) : Math.random();
+    const ratio = Number.isFinite(rawRatio) ? Math.min(Math.max(rawRatio, 0), 0.999999) : 0;
+    return Math.floor(minMs + ratio * (maxMs - minMs + 1));
+  }
+
+  function nextDeleteDelayMs(random) {
+    return randomDelayMs(MIN_DELETE_DELAY_MS, MAX_DELETE_DELAY_MS, random);
+  }
+
+  function nextBatchPauseMs(random) {
+    return randomDelayMs(MIN_BATCH_PAUSE_MS, MAX_BATCH_PAUSE_MS, random);
+  }
+
+  function shouldPauseAfterDelete(processedCount) {
+    return BATCH_PAUSE_EVERY > 0 && processedCount > 0 && processedCount % BATCH_PAUSE_EVERY === 0;
+  }
+
+  async function deleteCandidates(candidates, csrf, deleteOne, wait, onProgress, options = {}) {
+    const list = candidates || [];
     const failures = [];
     let successCount = 0;
+    let consecutiveFailures = 0;
+    let stoppedEarly = false;
+    const random = typeof options.random === 'function' ? options.random : Math.random;
 
-    for (const candidate of candidates || []) {
+    for (let index = 0; index < list.length; index += 1) {
+      const candidate = list[index];
       const body = buildDeleteBody(candidate.kid, csrf);
 
       try {
         const response = await deleteOne(candidate, body);
         if (response && response.code === 0) {
           successCount += 1;
+          consecutiveFailures = 0;
         } else {
+          consecutiveFailures += 1;
           failures.push({
             kid: candidate.kid,
             business: candidate.business,
@@ -244,6 +274,7 @@
           });
         }
       } catch (error) {
+        consecutiveFailures += 1;
         failures.push({
           kid: candidate.kid,
           business: candidate.business,
@@ -251,20 +282,35 @@
         });
       }
 
+      stoppedEarly = consecutiveFailures >= MAX_CONSECUTIVE_FAILURES;
+
       if (typeof onProgress === 'function') {
         onProgress({
           successCount,
           failures: failures.slice(),
-          total: candidates.length
+          processedCount: index + 1,
+          stoppedEarly,
+          total: list.length
         });
       }
 
-      await wait(DELETE_DELAY_MS);
+      if (stoppedEarly) {
+        break;
+      }
+
+      if (index < list.length - 1 && typeof wait === 'function') {
+        await wait(nextDeleteDelayMs(random));
+
+        if (shouldPauseAfterDelete(index + 1)) {
+          await wait(nextBatchPauseMs(random));
+        }
+      }
     }
 
     return {
       successCount,
-      failures
+      failures,
+      stoppedEarly
     };
   }
 
@@ -434,6 +480,7 @@
           '完成',
           `已删除: ${deleteResult.successCount}/${scanResult.candidates.length}`,
           `失败: ${deleteResult.failures.length}`,
+          deleteResult.stoppedEarly ? '已停止: 连续失败过多' : '已停止: 否',
           failureLines.length ? `失败详情:\n${failureLines.join('\n')}` : '失败详情: 无',
           '刷新页面可更新可见历史'
         ].join('\n'));
@@ -472,11 +519,16 @@
 
   return {
     CLEANUP_THRESHOLD,
+    BATCH_PAUSE_EVERY,
     DELETE_API_URL,
-    DELETE_DELAY_MS,
     DIRECT_DELETE_BUSINESS,
     HISTORY_API_URL,
     HISTORY_PAGE_SIZE,
+    MAX_BATCH_PAUSE_MS,
+    MAX_CONSECUTIVE_FAILURES,
+    MAX_DELETE_DELAY_MS,
+    MIN_BATCH_PAUSE_MS,
+    MIN_DELETE_DELAY_MS,
     buildDeleteBody,
     buildDeleteKid,
     buildHistoryUrl,
@@ -487,11 +539,15 @@
     fetchJson,
     parseBiliJctCookie,
     postDelete,
+    nextBatchPauseMs,
+    nextDeleteDelayMs,
+    randomDelayMs,
     scanCandidates,
     selectCandidates,
     setBusy,
     setExpanded,
     setStatus,
+    shouldPauseAfterDelete,
     shouldDeleteRecord,
     start
   };
