@@ -1,5 +1,7 @@
 # Bilibili History Cleaner
 
+[中文说明](README.zh-CN.md)
+
 Tampermonkey userscript for manually cleaning Bilibili watch history.
 
 ## Features
