@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name         Bilibili History Cleaner
-// @name:zh-CN   B站历史清理
+// @name         B站历史清理
+// @name:en      Bilibili History Cleaner
 // @namespace    https://github.com/jiang-yuan/bilibili-history-cleaner
-// @version      0.1.3
-// @description  Manually clean Bilibili history in batches: delete 80%+ completed archive records and live/article/PGC records.
-// @description:zh-CN 手动批量清理 B 站历史记录：删除 80% 以上普通视频，以及直播、专栏、PGC 记录。
+// @version      0.1.4
+// @description  手动批量清理 B 站历史记录：删除 80% 以上普通视频，以及直播、专栏、PGC 记录。
+// @description:en Manually clean Bilibili history in batches: delete 80%+ completed archive records and live/article/PGC records.
 // @author       wtvxy
 // @license      MIT
 // @match        https://www.bilibili.com/history*
