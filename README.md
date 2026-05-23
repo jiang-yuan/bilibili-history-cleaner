@@ -18,8 +18,8 @@
 
 先安装 Tampermonkey 等用户脚本管理器，然后从以下任一地址安装：
 
-- Greasy Fork 页面
-- GitHub raw `.user.js` 地址
+- [Greasy Fork 页面](https://greasyfork.org/zh-CN/scripts/579443-b站历史清理)
+- [GitHub raw `.user.js` 地址](https://raw.githubusercontent.com/jiang-yuan/bilibili-history-cleaner/main/src/bilibili-history-cleaner.user.js)
 - 本仓库的 `src/bilibili-history-cleaner.user.js`
 
 ## 使用

@@ -18,11 +18,9 @@ Tampermonkey userscript for manually cleaning Bilibili watch history.
 
 Install a userscript manager such as Tampermonkey, then install:
 
-```text
-src/bilibili-history-cleaner.user.js
-```
-
-After publishing, use the Greasy Fork install page or the raw GitHub `.user.js` URL.
+- [Greasy Fork page](https://greasyfork.org/en/scripts/579443-b站历史清理)
+- [GitHub raw `.user.js` URL](https://raw.githubusercontent.com/jiang-yuan/bilibili-history-cleaner/main/src/bilibili-history-cleaner.user.js)
+- `src/bilibili-history-cleaner.user.js` from this repository
 
 ## Usage
 
